@@ -14,58 +14,58 @@ from machine import Pin
 from machine import FPIOA
 
 # --- 摄像头视场角 (FOV) 预估值 ---
-H_FOV_DEG = 60.0
-V_FOV_DEG = 35.0
+H_FOV_DEG = 60.0              # 水平视场角 (角度)
+V_FOV_DEG = 35.0              # 垂直视场角 (角度)
 
 # 预计算 FOV 相关的常数
-H_TAN_HALF_FOV = math.tan(math.radians(H_FOV_DEG / 2.0))
-V_TAN_HALF_FOV = math.tan(math.radians(V_FOV_DEG / 2.0))
+H_TAN_HALF_FOV = math.tan(math.radians(H_FOV_DEG / 2.0))  # 水平视场角一半的正切值，用于偏转角计算
+V_TAN_HALF_FOV = math.tan(math.radians(V_FOV_DEG / 2.0))  # 垂直视场角一半的正切值，用于偏转角计算
 
 # 1. 严格同步跑通的分辨率设置
-SENSOR_ID = 2
-SENSOR_BASE_WIDTH = 1920
-SENSOR_BASE_HEIGHT = 1080
-SENSOR_FPS = 60
-DISPLAY_FPS = 15
-DETECT_WIDTH = ALIGN_UP(320, 16)
-DETECT_HEIGHT = 180
-LCD_WIDTH = 800
-LCD_HEIGHT = 480
-LCD_X_SCALE = LCD_WIDTH / DETECT_WIDTH
-LCD_Y_SCALE = LCD_HEIGHT / DETECT_HEIGHT
+SENSOR_ID = 2                 # 摄像头传感器 ID (ID=2 对应 1920x1080 基础采集模式)
+SENSOR_BASE_WIDTH = 1920      # 摄像头原始采集宽度 (16:9 宽画幅)
+SENSOR_BASE_HEIGHT = 1080     # 摄像头原始采集高度 (16:9 宽画幅)
+SENSOR_FPS = 60               # 摄像头采集帧率 (FPS)
+DISPLAY_FPS = 15              # 显示刷新率 (FPS)
+DETECT_WIDTH = ALIGN_UP(320, 16)  # 算法图像处理宽度 (16字节对齐，设为 320)
+DETECT_HEIGHT = 180           # 算法图像处理高度 (16:9 比例，设为 180)
+LCD_WIDTH = 800               # LCD 物理屏幕宽度 (像素)
+LCD_HEIGHT = 480              # LCD 物理屏幕高度 (像素)
+LCD_X_SCALE = LCD_WIDTH / DETECT_WIDTH  # 图像在 LCD 水平方向拉伸倍数
+LCD_Y_SCALE = LCD_HEIGHT / DETECT_HEIGHT # 图像在 LCD 垂直方向拉伸倍数
 
-IMG_CENTER_X = DETECT_WIDTH // 2
-IMG_CENTER_Y = DETECT_HEIGHT // 2
+IMG_CENTER_X = DETECT_WIDTH // 2   # 图像几何中心 X 坐标
+IMG_CENTER_Y = DETECT_HEIGHT // 2  # 图像几何中心 Y 坐标
 
 # LAB 阈值：格式为 (L_min, L_max, A_min, A_max, B_min, B_max)
 # 这组值需要按现场光照在 IDE 阈值工具里微调。
-LAB_TARGET_THRESHOLD = (0, 24, -18, 15, -17, 22)
-LAB_BINARY_INVERT = True
-DEBUG_CANDIDATES = True
+LAB_TARGET_THRESHOLD = (0, 24, -18, 15, -17, 22)  # 识别黑色边框的 LAB 色彩空间阈值
+LAB_BINARY_INVERT = True      # 二值化是否反相 (True 表示将阈值外的亮色区域设为白色，阈值内的黑色边框设为白色)
+DEBUG_CANDIDATES = True       # 是否开启候选矩形调试模式 (若开启会绘制并打印过滤原因)
 
 # --- 状态机定义 ---
-STATE_SEARCHING = 0
-STATE_LOCKED = 1
-STATE_COASTING = 2
+STATE_SEARCHING = 0           # 状态机状态：搜寻状态 (全屏搜索目标)
+STATE_LOCKED = 1              # 状态机状态：锁定状态 (在局部 ROI 框内精准跟踪)
+STATE_COASTING = 2            # 状态机状态：滑行状态 (目标短暂丢失时的滑行重获)
 
 # --- 靶标验证与局部 ROI 追踪配置 (与 rect_07.py 保持一致) ---
-MIN_ASPECT_RATIO = 0.85      # A4靶标最小长宽比
-MAX_ASPECT_RATIO = 1.65      # A4靶标最大长宽比
-MIN_AREA = 2250
-MAX_AREA = 26250
-MIN_DENSITY_MEAN = 70       # 靶标内部二值化后白色像素平均亮度阈值 (75% 空白量 = 255 * 0.75 = 191)
+MIN_ASPECT_RATIO = 0.85       # 候选靶标的最小长宽比
+MAX_ASPECT_RATIO = 1.65       # 候选靶标的最大长宽比
+MIN_AREA = 2250               # 候选靶标在 320x180 画面下的最小面积 (像素点数)
+MAX_AREA = 26250              # 候选靶标在 320x180 画面下的最大面积 (像素点数)
+MIN_DENSITY_MEAN = 70         # 靶标内部二值化后白色像素平均亮度阈值 (用于判断空心度和过滤杂噪)
 
 # ROI 局部追踪参数
-ROI_MARGIN = 25
-MAX_COASTING_FRAMES = 3    # 目标短暂丢失时的最大维持帧数
-ROI_EXPAND_MARGIN = 80
-MAX_ROI_EXPAND_STEPS = 2    # 局部 ROI 最多扩展次数，之后才退回全屏搜索
-ROI_FIND_RECTS_THRESHOLD = 8000
-FULLSCREEN_FIND_RECTS_THRESHOLD = 8000
-FULLSCREEN_SEARCH_INTERVAL = 1 # 全屏搜索：每帧执行 find_rects
+ROI_MARGIN = 25               # 跟踪成功后，局部搜索框向四周外扩的像素余量 (防止运动出框)
+MAX_COASTING_FRAMES = 3       # 目标短暂丢失时，允许保持滑行状态的最大帧数
+ROI_EXPAND_MARGIN = 80        # 局部追踪丢失后，每次向外扩展搜索区域的像素量
+MAX_ROI_EXPAND_STEPS = 2      # 局部追踪丢失后，最大允许扩张 ROI 的次数，超限则退回全屏搜索
+ROI_FIND_RECTS_THRESHOLD = 8000  # 局部 ROI 追踪时的矩形边缘梯度阈值
+FULLSCREEN_FIND_RECTS_THRESHOLD = 8000  # 全屏搜索时的矩形边缘梯度阈值
+FULLSCREEN_SEARCH_INTERVAL = 1  # 全屏搜索帧间隔 (每帧都执行)
 
 # 形态学滤波闭运算迭代次数 (1:1 保持边框尺寸)
-MORPH_ITERATIONS = 1
+MORPH_ITERATIONS = 1          # 膨胀与腐蚀的迭代次数，用于边缘缝合与降噪
 
 sensor = None
 gpio2_pin = None
