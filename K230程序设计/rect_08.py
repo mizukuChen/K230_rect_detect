@@ -1,14 +1,9 @@
 # ------------------------------------------------------------------------
-# rect_07.py
-# 基于 rect_04.py (形态学滤波版) 的动态局部 ROI 追踪版 (方案七)：
-# 1. 放弃 rect_05 的全图寻找+移动距离限制方案，改用动态感兴趣区域 (ROI) 局部搜索。
-# 2. 初始状态 (SEARCHING) 全图寻找靶标。一旦通过初筛（几何过滤与内部像素均值校验），
-#    则在下一帧将识别区域限制在略大于靶标矩形尺寸 of 局部 ROI 内。
-# 3. 图像二值化、形态学膨胀/腐蚀、以及矩形搜寻全部局限在局部 ROI 内进行。
-#    * 优势：像素处理量从 76800 暴降至 15000 左右，大幅提升处理速度(FPS)；
-#    * 优势：外部背景噪声（如其他远处的矩形、光斑）被彻底物理隔离，不会产生任何干扰。
-# 4. 支持丢失滑行机制 (COASTING)：若在局部 ROI 发生短暂丢失，维持该 ROI 滑行 3 帧；
-#    若持续丢失，则将 ROI 重置为全图，重回 SEARCHING 状态重新捕捉。
+# rect_08.py
+# 基于 rect_07.py 的 LAB 阈值版本：
+# 1. 识别流程、ROI 状态机、形态学、矩形查找与校验逻辑保持和 rect_07.py 一致。
+# 2. 唯一算法差异：rect_07 使用灰度阈值，rect_08 使用 LAB 阈值。
+# 3. IDE 输出二值化后的黑白图像，便于直接观察 LAB 阈值结果。
 # ------------------------------------------------------------------------
 import time, os, gc, sys, math
 
@@ -33,23 +28,26 @@ DETECT_HEIGHT = 240
 IMG_CENTER_X = DETECT_WIDTH // 2
 IMG_CENTER_Y = DETECT_HEIGHT // 2
 
-# 用户要求的二值化阈值
-target_threshold = (53, 175)
+# LAB 阈值：格式为 (L_min, L_max, A_min, A_max, B_min, B_max)
+# 这组值需要按现场光照在 IDE 阈值工具里微调。
+LAB_TARGET_THRESHOLD = (0, 24, -18, 15, -17, 22)
+LAB_BINARY_INVERT = True
+DEBUG_CANDIDATES = True
 
 # --- 状态机定义 ---
 STATE_SEARCHING = 0
 STATE_LOCKED = 1
 STATE_COASTING = 2
 
-# --- 靶标验证与局部 ROI 追踪配置 (方案七核心) ---
+# --- 靶标验证与局部 ROI 追踪配置 (与 rect_07.py 保持一致) ---
 MIN_ASPECT_RATIO = 1.1      # A4靶标最小长宽比
 MAX_ASPECT_RATIO = 1.8      # A4靶标最大长宽比
 MIN_AREA = 3000             # A4靶标在 320x240 分辨率下的最小面积（像素）
 MAX_AREA = 35000            # A4靶标在 320x240 分辨率下的最大面积（像素）
-MIN_DENSITY_MEAN = 170      # 靶标内部二值化后白色像素平均亮度阈值
+MIN_DENSITY_MEAN = 70       # LAB/RGB 二值图 statistics().mean() 通常低于灰度版，按实测候选均值 82 降低阈值
 
 # ROI 局部追踪参数
-ROI_MARGIN = 25             # 局部搜索框在靶标矩形四周外扩的像素余量 (防止目标移动出框)
+ROI_MARGIN = 35             # 局部搜索框在靶标矩形四周外扩的像素余量 (防止目标移动出框)
 MAX_COASTING_FRAMES = 3    # 目标短暂丢失时的最大维持帧数
 ROI_EXPAND_MARGIN = 45      # 局部 ROI 丢失后每次向外扩展的像素量
 MAX_ROI_EXPAND_STEPS = 2    # 局部 ROI 最多扩展次数，之后才退回全屏搜索
@@ -79,8 +77,8 @@ def camera_init():
 
     # set chn0 output size
     sensor.set_framesize(width=DETECT_WIDTH, height=DETECT_HEIGHT)
-    # set chn0 output format (纯灰度极速)
-    sensor.set_pixformat(Sensor.GRAYSCALE)
+    # LAB 阈值需要彩色输入
+    sensor.set_pixformat(Sensor.RGB565)
 
     # use IDE as display output
     Display.init(Display.VIRT, width=DETECT_WIDTH, height=DETECT_HEIGHT, fps=100, to_ide=True)
@@ -131,6 +129,21 @@ def validate_target_candidate(img, r):
         return False
 
     return True
+
+def get_candidate_reject_reason(img, r):
+    w, h = r.w(), r.h()
+    area = w * h
+    aspect_ratio = float(w) / h if h != 0 else 0
+    stat = img.statistics(roi=r.rect())
+    mean = stat.mean()
+
+    if not (MIN_ASPECT_RATIO <= aspect_ratio <= MAX_ASPECT_RATIO):
+        return "aspect", area, aspect_ratio, mean
+    if not (MIN_AREA <= area <= MAX_AREA):
+        return "area", area, aspect_ratio, mean
+    if mean < MIN_DENSITY_MEAN:
+        return "mean", area, aspect_ratio, mean
+    return "ok", area, aspect_ratio, mean
 
 # ------------------------------------------------------------------------
 # 根据检测到的矩形，计算并裁剪下一帧的局部搜索 ROI
@@ -203,7 +216,7 @@ def capture_picture():
         try:
             os.exitpoint()
             global sensor
-            # 1. 抓取原始灰度图像
+            # 1. 抓取原始彩色图像
             img = sensor.snapshot()
 
             active_fullscreen = is_fullscreen_roi(search_roi)
@@ -215,8 +228,8 @@ def capture_picture():
                 fullscreen_search_counter = 0
 
             # 2. 图像处理与算法运行 (全部局限在 active_roi 内，大幅降低 CPU 开销)
-            # 对局部/全局搜索区域进行二值化
-            img.binary([target_threshold], roi=search_roi)
+            # 与 rect_07.py 唯一算法差异：这里使用 LAB 阈值，而不是灰度阈值。
+            img.binary([LAB_TARGET_THRESHOLD], invert=LAB_BINARY_INVERT, roi=search_roi)
 
             if run_rect_search and not active_fullscreen:
                 # 局部 ROI 下保留形态学闭运算；全屏搜索时跳过，降低临时帧缓冲压力
@@ -234,7 +247,14 @@ def capture_picture():
             if rects:
                 # 单次遍历选出通过特征校验且面积最大的矩形，避免额外候选列表占用内存
                 for r in rects:
-                    if validate_target_candidate(img, r):
+                    if DEBUG_CANDIDATES:
+                        reason, area, aspect_ratio, mean = get_candidate_reject_reason(img, r)
+                        img.draw_rectangle([v for v in r.rect()], color=255, thickness=1)
+                        print(f"Rect cand -> reason:{reason} rect:{r.rect()} area:{area} aspect:{aspect_ratio:.2f} mean:{mean:.1f}")
+                        if reason == "ok":
+                            if best_rect is None or area > (best_rect.w() * best_rect.h()):
+                                best_rect = r
+                    elif validate_target_candidate(img, r):
                         if best_rect is None or (r.w() * r.h()) > (best_rect.w() * best_rect.h()):
                             best_rect = r
 
@@ -280,7 +300,7 @@ def capture_picture():
                 last_dx, last_dy = dx, dy
                 last_yaw, last_pitch = yaw_angle, pitch_angle
 
-                print(f"Target LOCKED (ROI) -> dx: {dx:3d}, dy: {dy:3d} | Yaw: {yaw_angle:5.1f}°, Pitch: {pitch_angle:5.1f}° | ROI: {search_roi} | FPS: {fps_val:.1f}")
+                print(f"Target LOCKED (LAB ROI) -> dx: {dx:3d}, dy: {dy:3d} | Yaw: {yaw_angle:5.1f}°, Pitch: {pitch_angle:5.1f}° | ROI: {search_roi} | FPS: {fps_val:.1f}")
 
             else:
                 set_gpio2_high(False)
@@ -356,7 +376,7 @@ def capture_picture():
             best_rect = None
             img = None
             gc.collect()
-            print("MemoryError: reset to throttled fullscreen search and continue")
+            print("MemoryError: reset to throttled fullscreen LAB search and continue")
             continue
         except BaseException as e:
             import sys
@@ -367,10 +387,10 @@ def main():
     os.exitpoint(os.EXITPOINT_ENABLE)
     camera_is_init = False
     try:
-        print("--- rect_07 启动 (动态局部 ROI 追踪版) ---")
+        print("--- rect_08 启动 (LAB 阈值动态 ROI 追踪版) ---")
         camera_init()
         camera_is_init = True
-        print("camera capture start with recognition")
+        print("camera capture start with LAB recognition")
         capture_picture()
     except Exception as e:
         import sys

@@ -31,10 +31,22 @@
     *   **描述**：基于 `rect_05.py` 的多特征安全过滤版本。引入几何外轮廓校验（长宽比/面积限制）、内部像素密度均值校验以及时序多帧稳定滤波机制。彻底杜绝初始搜寻（SEARCHING）和锁定（LOCKED）状态下误识别背景杂乱物品为靶标的情况。**内置基于 1 秒滑动窗口（Sliding Window）的瞬时 FPS 估算器，每帧更新且无历史累积偏差**。
 *   **[rect_07.py](file:///D:/work_office/code/keil_project/2026_pretest/视觉/K230程序设计/rect_07.py)** (动态局部 ROI 追踪版)
     *   **配置**：`320x240 GRAYSCALE` (纯灰度采集)
-    *   **描述**：基于 `rect_04.py` 的动态感兴趣区域（ROI）跟踪版本。转而通过动态缩放的局部搜索 ROI 来限制图像操作（二值化、形态学、矩形查找）。既实现了从物理层面上完全屏蔽 ROI 外的所有背景噪声，又极大地减少了每帧的像素处理数量，极大地提升了 FPS 处理速度（通常可达 40+ FPS）。同样支持短暂丢失时的滑行重获机制，**并同样配备 1 秒滑动窗口瞬时 FPS 估算器，反应极其灵敏**。当前版本参考 `examples/03-Machine/pin.py` / `pin_irq.py` 的 GPIO 初始化方式，将 Pin2 复用为 GPIO2，并在每帧识别到有效矩形时输出高电平，未识别到有效矩形时输出低电平。
+    *   **描述**：基于 `rect_04.py` 的动态感兴趣区域（ROI）跟踪版本。转而通过动态缩放的局部搜索 ROI 来限制图像操作（二值化、形态学、矩形查找）。既实现了从物理层面上完全屏蔽 ROI 外的所有背景噪声，又极大地减少了每帧的像素处理数量，极大地提升了 FPS 处理速度（通常可达 40+ FPS）。同样支持短暂丢失时的滑行重获机制，**并同样配备 1 秒滑动窗口瞬时 FPS 估算器，反应极其灵敏**。当前版本参考 `examples/03-Machine/pin.py` / `pin_irq.py` 的 GPIO 初始化方式，将 Pin2 复用为 GPIO2，并在每帧识别到有效矩形时输出高电平，未识别到有效矩形时输出低电平。针对目标反复离屏/入屏导致的 fast frame buffer stack 压力，现改为“局部丢失先扩展 ROI，两次失败后才回全屏”，并对全屏 `find_rects()` 做降频和更高阈值处理；若仍触发 `MemoryError`，会重置到低频全屏搜索并继续运行，避免进程直接停止。
 *   **[rect_07_1.py](file:///D:/work_office/code/keil_project/2026_pretest/视觉/K230程序设计/rect_07_1.py)** (动态局部 ROI 彩色预览版)
     *   **配置**：`320x240 RGB565` (彩色采集)
     *   **描述**：参考 `rect_01.py` 的“彩色原图预览 + 灰度副本算法处理”架构，在 `rect_07.py` 的动态 ROI 追踪基础上改为 RGB565 彩色采集。每帧通过 `img.copy().to_grayscale()` 生成算法副本，在副本上执行 ROI 二值化、形态学滤波和矩形查找，再将靶标框、ROI 框、中心偏差、Yaw/Pitch 与 FPS 绘制回彩色原图显示。保留 GPIO2 有效目标输出：识别到有效矩形时置高电平，未识别到有效矩形时置低电平。
+*   **[rect_08.py](file:///D:/work_office/code/keil_project/2026_pretest/视觉/K230程序设计/rect_08.py)** (LAB 阈值动态 ROI 追踪版)
+    *   **配置**：`320x240 RGB565` (彩色采集)
+    *   **描述**：基于当前 `rect_07.py` 的完整识别流程实现，动态 ROI、ROI 扩展重获、全屏搜索降频、GPIO2 输出、`MemoryError` 恢复、形态学、矩形查找与候选校验逻辑均保持一致；核心差异仅为 `rect_07.py` 使用灰度阈值，而本版本使用 `LAB_TARGET_THRESHOLD = (0, 24, -18, 15, -17, 22)` 配合 `invert=True` 做 LAB 反相二值化。由于 LAB/RGB 二值图的 `statistics().mean()` 实测低于灰度版，密度阈值调整为 `MIN_DENSITY_MEAN = 70`。本版本采集格式为 RGB565，最终输出黑白二值图。当前开启候选矩形调试输出，会打印每个 `find_rects` 候选的面积、长宽比、均值和过滤原因，便于排查“图像清楚但未锁定”的问题。
+*   **[rect_08_1.py](file:///D:/work_office/code/keil_project/2026_pretest/视觉/K230程序设计/rect_08_1.py)** (LAB 阈值彩色预览版)
+    *   **配置**：`320x240 RGB565` (彩色采集)
+    *   **描述**：`rect_08.py` 的彩色显示版本，复用其 LAB 反相二值化、动态 ROI、GPIO2 输出和异常恢复策略，但将识别结果绘制回 RGB565 原图显示。该文件依赖同目录下的 `rect_08.py`，适合在调试阶段同时观察真实彩色画面和识别框线。
+*   **[rect_08_2.py](file:///D:/work_office/code/keil_project/2026_pretest/视觉/K230程序设计/rect_08_2.py)** (LAB 阈值无形态学滤波版)
+    *   **配置**：`320x240 RGB565` (彩色采集)
+    *   **描述**：基于 `rect_08.py` 的对照测试版本，保留 LAB 反相二值化、动态 ROI、GPIO2 输出、候选矩形调试、全屏搜索降频和 `MemoryError` 恢复逻辑，但删除 `dilate()` / `erode()` 形态学闭运算，用于判断形态学滤波是否影响当前 LAB 矩形识别稳定性。
+*   **[rect_08_3.py](file:///D:/work_office/code/keil_project/2026_pretest/视觉/K230程序设计/rect_08_3.py)** (LAB 阈值 MemoryError 退避恢复版)
+    *   **配置**：`320x240 RGB565` (彩色采集)
+    *   **描述**：基于 `rect_08.py` 的稳健恢复版本，保留 LAB 反相二值化、形态学滤波、动态 ROI 和 GPIO2 输出。针对 fast frame buffer stack 溢出，新增退避恢复机制：发生 `MemoryError` 后跳过若干帧 `find_rects()`，连续溢出时逐步增加跳帧数；恢复期临时提高 `find_rects` 阈值，并改为稀疏全屏搜索，避免反复探测同一个触发溢出的局部 ROI。当前关闭候选调试绘制和屏幕文字叠加，并过滤贴近画面边缘的候选矩形，减少误锁半截目标和 `draw_string` 警告噪声。
 
 ### 2. 辅助测试与主入口程序
 

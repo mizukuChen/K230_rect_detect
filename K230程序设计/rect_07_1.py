@@ -29,7 +29,7 @@ IMG_CENTER_X = DETECT_WIDTH // 2
 IMG_CENTER_Y = DETECT_HEIGHT // 2
 
 # 用户要求的二值化阈值
-target_threshold = (66, 163)
+target_threshold = (53, 175)
 
 # --- 状态机定义 ---
 STATE_SEARCHING = 0
