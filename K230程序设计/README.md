@@ -44,12 +44,12 @@
 *   **[rect08_lcd.py](file:///D:/work_office/code/keil_project/2026_pretest/视觉/K230程序设计/rect08_lcd.py)** (LAB 阈值动态 ROI LCD 全屏版)
     *   **配置**：`320x240 RGB565` 摄像头采集，`800x480 ST7701` LCD 输出
     *   **描述**：基于 `rect_08.py` 的 LCD 显示版本，保留 LAB 反相二值化、动态 ROI、ROI 扩展重获、全屏搜索降频、GPIO2 输出、`MemoryError` 恢复、形态学和候选校验逻辑；显示端改为 LCD，并复用一张 `800x480 RGB565` 显示帧，通过 `draw_image(..., x_scale, y_scale)` 将 `320x240` 黑白二值输出拉伸到 LCD 全屏。
-*   **[rect09_lcd.py](file:///D:/work_office/code/keil_project/2026_pretest/视觉/K230程序设计/rect09_lcd.py)** (Sensor id=2 + LAB 阈值动态 ROI LCD 版)
-    *   **配置**：`Sensor(id=2, width=1280, height=720, fps=90)` 基础模式，输出 `320x240 RGB565`，`800x480 ST7701` LCD 输出
-    *   **描述**：基于 `rect_08.py` 的 LAB 识别流程重构，保留 `LAB_TARGET_THRESHOLD = (0, 24, -18, 15, -17, 22)`、LAB 反相二值化、**全屏形态学滤波（闭运算）**、动态 ROI、ROI 扩展重获、**全屏每帧搜索（取消降频且门槛阈值降至 8000）**、GPIO2 输出 and `MemoryError` 恢复逻辑；采集路径改为当前连接线排查中使用的 `Sensor(id=2)` 新式初始化方式。为保证实时性，当前将算法输出分辨率降回 `320x240`，面积阈值和 ROI 边距也恢复为 `rect_08.py` 的量级，显示端将二值输出拉伸到 LCD 全屏。
-*   **[rect09.py](file:///D:/work_office/code/keil_project/2026_pretest/视觉/K230程序设计/rect09.py)** (Sensor id=2 + LAB 阈值动态 ROI IDE 版)
-    *   **配置**：`Sensor(id=2, width=1280, height=720, fps=90)` 基础模式，输出 `320x240 RGB565`，IDE 虚拟显示输出
-    *   **描述**：基于 `rect09_lcd.py` 的电脑显示版本，采集路径、LAB 阈值、动态 ROI、全屏形态学滤波、**全屏每帧搜索（取消降频且门槛阈值降至 8000）**、GPIO2 输出和恢复逻辑保持一致；显示端从 `Display.ST7701` 改为 `Display.VIRT`，通过 `to_ide=True` 将二值处理后的画面传输到电脑 IDE 显示。为保证实时性，当前将算法输出分辨率降回 `320x240`，面积阈值和 ROI 边距也恢复为 `rect_08.py` 的量级。
+*   **[rect09_lcd.py](file:///D:/work_office/code/keil_project/2026_pretest/视觉/K230程序设计/rect09_lcd.py)** (Sensor id=2 + 16:9 LAB 阈值动态 ROI LCD 版)
+    *   **配置**：`Sensor(id=2, width=1280, height=720, fps=90)` 基础模式，输出 `320x180 RGB565`，`800x480 ST7701` LCD 输出
+    *   **描述**：第 9 代 LCD 版，采用原第 10 代的 16:9 视角方案。保持 `Sensor(id=2)` 采集路径、LAB 阈值、动态 ROI、形态学滤波、GPIO2 输出和恢复逻辑；算法输出为 `320x180`，匹配 `1280x720` 基础模式，减少由 4:3 输出导致的左右裁剪。显示端将二值输出拉伸到 LCD 全屏。
+*   **[rect09.py](file:///D:/work_office/code/keil_project/2026_pretest/视觉/K230程序设计/rect09.py)** (Sensor id=2 + 16:9 LAB 阈值动态 ROI IDE 版)
+    *   **配置**：`Sensor(id=2, width=1280, height=720, fps=90)` 基础模式，输出 `320x180 RGB565`，IDE 虚拟显示输出
+    *   **描述**：第 9 代 IDE 版，采用原第 10 代的 16:9 视角方案。采集路径、LAB 阈值、动态 ROI、形态学滤波、GPIO2 输出和恢复逻辑与 `rect09_lcd.py` 一致；显示端从 `Display.ST7701` 改为 `Display.VIRT`，通过 `to_ide=True` 将二值处理后的画面传输到电脑 IDE 显示。
 *   **[rect_08_1.py](file:///D:/work_office/code/keil_project/2026_pretest/视觉/K230程序设计/rect_08_1.py)** (LAB 阈值彩色预览版)
     *   **配置**：`320x240 RGB565` (彩色采集)
     *   **描述**：`rect_08.py` 的彩色显示版本，复用其 LAB 反相二值化、动态 ROI、GPIO2 输出和异常恢复策略，但将识别结果绘制回 RGB565 原图显示。该文件依赖同目录下的 `rect_08.py`，适合在调试阶段同时观察真实彩色画面和识别框线。

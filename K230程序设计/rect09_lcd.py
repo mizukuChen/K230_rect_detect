@@ -29,7 +29,7 @@ SENSOR_BASE_HEIGHT = 720
 SENSOR_FPS = 90
 DISPLAY_FPS = 15
 DETECT_WIDTH = ALIGN_UP(320, 16)
-DETECT_HEIGHT = 240
+DETECT_HEIGHT = 180
 LCD_WIDTH = 800
 LCD_HEIGHT = 480
 LCD_X_SCALE = LCD_WIDTH / DETECT_WIDTH
@@ -52,14 +52,14 @@ STATE_COASTING = 2
 # --- 靶标验证与局部 ROI 追踪配置 (与 rect_07.py 保持一致) ---
 MIN_ASPECT_RATIO = 0.85      # A4靶标最小长宽比
 MAX_ASPECT_RATIO = 1.65      # A4靶标最大长宽比
-MIN_AREA = 3000
-MAX_AREA = 35000
-MIN_DENSITY_MEAN = 75       # 靶标内部二值化后白色像素平均亮度阈值 (75% 空白量 = 255 * 0.75 = 191)
+MIN_AREA = 2250
+MAX_AREA = 26250
+MIN_DENSITY_MEAN = 70       # LAB/RGB 二值图 statistics().mean() 通常低于灰度版
 
 # ROI 局部追踪参数
-ROI_MARGIN = 35
+ROI_MARGIN = 26
 MAX_COASTING_FRAMES = 3    # 目标短暂丢失时的最大维持帧数
-ROI_EXPAND_MARGIN = 45
+ROI_EXPAND_MARGIN = 34
 MAX_ROI_EXPAND_STEPS = 2    # 局部 ROI 最多扩展次数，之后才退回全屏搜索
 ROI_FIND_RECTS_THRESHOLD = 8000
 FULLSCREEN_FIND_RECTS_THRESHOLD = 8000
@@ -396,7 +396,7 @@ def main():
     os.exitpoint(os.EXITPOINT_ENABLE)
     camera_is_init = False
     try:
-        print("--- rect09_lcd 启动 (Sensor id=2 + LAB 阈值动态 ROI LCD 版) ---")
+        print("--- rect09_lcd 启动 (Sensor id=2 + 16:9 LAB 阈值动态 ROI LCD 版) ---")
         camera_init()
         camera_is_init = True
         print("camera capture start with LAB recognition")
