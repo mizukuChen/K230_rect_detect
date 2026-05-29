@@ -1,5 +1,5 @@
 # ------------------------------------------------------------------------
-# rect7_lcd.py
+# rect07_lcd.py
 # 基于 rect_07_1.py 的 LCD 彩色输出版本：
 # 1. 摄像头采集 RGB565 彩色图像，用于 LCD 彩色预览。
 # 2. 每帧 copy() 一份图像转灰度后，在灰度副本上执行 ROI 二值化、形态学滤波和矩形查找。
@@ -297,7 +297,7 @@ def main():
     os.exitpoint(os.EXITPOINT_ENABLE)
     camera_is_init = False
     try:
-        print("--- rect7_lcd 启动 (动态局部 ROI LCD 彩色输出版) ---")
+        print("--- rect07_lcd 启动 (动态局部 ROI LCD 彩色输出版) ---")
         camera_init()
         camera_is_init = True
         print("camera capture start with color preview recognition")

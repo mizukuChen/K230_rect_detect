@@ -1,5 +1,5 @@
 # ------------------------------------------------------------------------
-# rect8_lcd.py
+# rect09_lcd.py
 # 基于 rect_07.py 的 LAB 阈值版本：
 # 1. 识别流程、ROI 状态机、形态学、矩形查找与校验逻辑保持和 rect_07.py 一致。
 # 2. 唯一算法差异：rect_07 使用灰度阈值，rect_08 使用 LAB 阈值。
@@ -23,6 +23,11 @@ H_TAN_HALF_FOV = math.tan(math.radians(H_FOV_DEG / 2.0))
 V_TAN_HALF_FOV = math.tan(math.radians(V_FOV_DEG / 2.0))
 
 # 1. 严格同步跑通的分辨率设置
+SENSOR_ID = 2
+SENSOR_BASE_WIDTH = 1280
+SENSOR_BASE_HEIGHT = 720
+SENSOR_FPS = 90
+DISPLAY_FPS = 15
 DETECT_WIDTH = ALIGN_UP(320, 16)
 DETECT_HEIGHT = 240
 LCD_WIDTH = 800
@@ -45,20 +50,20 @@ STATE_LOCKED = 1
 STATE_COASTING = 2
 
 # --- 靶标验证与局部 ROI 追踪配置 (与 rect_07.py 保持一致) ---
-MIN_ASPECT_RATIO = 1.1      # A4靶标最小长宽比
-MAX_ASPECT_RATIO = 1.8      # A4靶标最大长宽比
-MIN_AREA = 3000             # A4靶标在 320x240 分辨率下的最小面积（像素）
-MAX_AREA = 35000            # A4靶标在 320x240 分辨率下的最大面积（像素）
-MIN_DENSITY_MEAN = 70       # LAB/RGB 二值图 statistics().mean() 通常低于灰度版，按实测候选均值 82 降低阈值
+MIN_ASPECT_RATIO = 0.85      # A4靶标最小长宽比
+MAX_ASPECT_RATIO = 1.65      # A4靶标最大长宽比
+MIN_AREA = 3000
+MAX_AREA = 35000
+MIN_DENSITY_MEAN = 75       # 靶标内部二值化后白色像素平均亮度阈值 (75% 空白量 = 255 * 0.75 = 191)
 
 # ROI 局部追踪参数
-ROI_MARGIN = 35             # 局部搜索框在靶标矩形四周外扩的像素余量 (防止目标移动出框)
+ROI_MARGIN = 35
 MAX_COASTING_FRAMES = 3    # 目标短暂丢失时的最大维持帧数
-ROI_EXPAND_MARGIN = 45      # 局部 ROI 丢失后每次向外扩展的像素量
+ROI_EXPAND_MARGIN = 45
 MAX_ROI_EXPAND_STEPS = 2    # 局部 ROI 最多扩展次数，之后才退回全屏搜索
 ROI_FIND_RECTS_THRESHOLD = 8000
-FULLSCREEN_FIND_RECTS_THRESHOLD = 16000
-FULLSCREEN_SEARCH_INTERVAL = 3 # 全屏搜索降频：每 3 帧执行一次 find_rects
+FULLSCREEN_FIND_RECTS_THRESHOLD = 8000
+FULLSCREEN_SEARCH_INTERVAL = 1 # 全屏搜索：每帧执行 find_rects
 
 sensor = None
 gpio2_pin = None
@@ -77,7 +82,7 @@ def set_gpio2_high(is_high):
 def camera_init():
     global sensor
     # 构造 Sensor 对象
-    sensor = Sensor(width=DETECT_WIDTH, height=DETECT_HEIGHT)
+    sensor = Sensor(id=SENSOR_ID, width=SENSOR_BASE_WIDTH, height=SENSOR_BASE_HEIGHT, fps=SENSOR_FPS)
     sensor.reset()
 
     # set chn0 output size
@@ -86,7 +91,7 @@ def camera_init():
     sensor.set_pixformat(Sensor.RGB565)
 
     # use LCD as display output
-    Display.init(Display.ST7701, width=LCD_WIDTH, height=LCD_HEIGHT, fps=100, to_ide=False)
+    Display.init(Display.ST7701, width=LCD_WIDTH, height=LCD_HEIGHT, fps=DISPLAY_FPS, to_ide=False)
     # init media manager
     MediaManager.init()
     # sensor start run
@@ -227,18 +232,14 @@ def capture_picture():
 
             active_fullscreen = is_fullscreen_roi(search_roi)
             run_rect_search = True
-            if tracking_state == STATE_SEARCHING and active_fullscreen:
-                fullscreen_search_counter += 1
-                run_rect_search = (fullscreen_search_counter % FULLSCREEN_SEARCH_INTERVAL) == 1
-            else:
-                fullscreen_search_counter = 0
+            fullscreen_search_counter = 0
 
             # 2. 图像处理与算法运行 (全部局限在 active_roi 内，大幅降低 CPU 开销)
             # 与 rect_07.py 唯一算法差异：这里使用 LAB 阈值，而不是灰度阈值。
             img.binary([LAB_TARGET_THRESHOLD], invert=LAB_BINARY_INVERT, roi=search_roi)
 
-            if run_rect_search and not active_fullscreen:
-                # 局部 ROI 下保留形态学闭运算；全屏搜索时跳过，降低临时帧缓冲压力
+            if run_rect_search:
+                # 执行形态学闭运算以提高边缘稳定性（缝合边缘并去除毛刺）
                 img.dilate(1, roi=search_roi)
                 img.erode(1, roi=search_roi)
 
@@ -395,7 +396,7 @@ def main():
     os.exitpoint(os.EXITPOINT_ENABLE)
     camera_is_init = False
     try:
-        print("--- rect8_lcd 启动 (LAB 阈值动态 ROI LCD 全屏版) ---")
+        print("--- rect09_lcd 启动 (Sensor id=2 + LAB 阈值动态 ROI LCD 版) ---")
         camera_init()
         camera_is_init = True
         print("camera capture start with LAB recognition")
