@@ -1,11 +1,12 @@
 # ------------------------------------------------------------------------
-# rect09.py
-# 基于 rect_07.py 的 LAB 阈值版本：
-# 1. 识别流程、ROI 状态机、形态学、矩形查找与校验逻辑保持和 rect_07.py 一致。
-# 2. 唯一算法差异：rect_07 使用灰度阈值，rect_08 使用 LAB 阈值。
-# 3. IDE 输出二值化后的黑白图像，便于直接观察 LAB 阈值结果。
+# rect10_lcd.py
+# 基于 rect10.py 的 LCD 显示版本：
+# 1. 识别流程、16:9 比例 (320x180)、LAB 阈值、动态 ROI 追踪与形态学参数与 rect10.py 一致。
+# 2. 主要差异：显示后端从 IDE 虚拟显示改为 LCD 屏幕 (ST7701)，关闭 to_ide 镜像输出。
+# 3. 显示时复用一张 800x480 RGB565 LCD 帧，通过 draw_image 将 320x180 画面拉伸到 LCD 全屏。
 # ------------------------------------------------------------------------
 import time, os, gc, sys, math
+import image
 
 from media.sensor import *
 from media.display import *
@@ -23,9 +24,9 @@ V_TAN_HALF_FOV = math.tan(math.radians(V_FOV_DEG / 2.0))
 
 # 1. 严格同步跑通的分辨率设置
 SENSOR_ID = 2
-SENSOR_BASE_WIDTH = 1280
-SENSOR_BASE_HEIGHT = 720
-SENSOR_FPS = 90
+SENSOR_BASE_WIDTH = 1920
+SENSOR_BASE_HEIGHT = 1080
+SENSOR_FPS = 60
 DISPLAY_FPS = 15
 DETECT_WIDTH = ALIGN_UP(320, 16)
 DETECT_HEIGHT = 180
@@ -48,7 +49,7 @@ STATE_SEARCHING = 0
 STATE_LOCKED = 1
 STATE_COASTING = 2
 
-# --- 靶标验证与局部 ROI 追踪配置 (与 rect_07.py 保持一致) ---
+# --- 靶标验证与局部 ROI 追踪配置 (与 rect10.py 保持一致) ---
 MIN_ASPECT_RATIO = 0.85      # A4靶标最小长宽比
 MAX_ASPECT_RATIO = 1.65      # A4靶标最大长宽比
 MIN_AREA = 2250
@@ -56,9 +57,9 @@ MAX_AREA = 26250
 MIN_DENSITY_MEAN = 70       # 靶标内部二值化后白色像素平均亮度阈值 (75% 空白量 = 255 * 0.75 = 191)
 
 # ROI 局部追踪参数
-ROI_MARGIN = 26
+ROI_MARGIN = 25
 MAX_COASTING_FRAMES = 3    # 目标短暂丢失时的最大维持帧数
-ROI_EXPAND_MARGIN = 34
+ROI_EXPAND_MARGIN = 80
 MAX_ROI_EXPAND_STEPS = 2    # 局部 ROI 最多扩展次数，之后才退回全屏搜索
 ROI_FIND_RECTS_THRESHOLD = 8000
 FULLSCREEN_FIND_RECTS_THRESHOLD = 8000
@@ -92,8 +93,8 @@ def camera_init():
     # LAB 阈值需要彩色输入
     sensor.set_pixformat(Sensor.RGB565)
 
-    # use IDE as display output
-    Display.init(Display.VIRT, width=DETECT_WIDTH, height=DETECT_HEIGHT, fps=DISPLAY_FPS, to_ide=True)
+    # use LCD as display output
+    Display.init(Display.ST7701, width=LCD_WIDTH, height=LCD_HEIGHT, fps=DISPLAY_FPS, to_ide=False)
     # init media manager
     MediaManager.init()
     # sensor start run
@@ -210,6 +211,8 @@ def capture_picture():
     last_pitch = 0.0
     roi_expand_steps = 0
     fullscreen_search_counter = 0
+    display_img = image.Image(LCD_WIDTH, LCD_HEIGHT, image.RGB565)
+
     while True:
         # 计算滑动窗口瞬时帧率
         now_time = time.ticks_ms()
@@ -353,8 +356,10 @@ def capture_picture():
             # 4. 绘制 FPS
             img.draw_string(10, 10, "FPS: %.2f" % fps_val, color=255, scale=2)
 
-            # 5. 传输到电脑 IDE 显示
-            Display.show_image(img)
+            # 5. 显示到 LCD 全屏
+            display_img.clear()
+            display_img.draw_image(img, 0, 0, x_scale=LCD_X_SCALE, y_scale=LCD_Y_SCALE)
+            Display.show_image(display_img)
 
             # 6. 内存回收
             rects = None
@@ -394,7 +399,7 @@ def main():
     os.exitpoint(os.EXITPOINT_ENABLE)
     camera_is_init = False
     try:
-        print("--- rect09 启动 (Sensor id=2 + 16:9 LAB 阈值动态 ROI IDE 版) ---")
+        print("--- rect10_lcd 启动 (Sensor id=2 + 16:9 LAB 动态 ROI LCD 版) ---")
         camera_init()
         camera_is_init = True
         print("camera capture start with LAB recognition")

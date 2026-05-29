@@ -65,6 +65,9 @@ ROI_FIND_RECTS_THRESHOLD = 8000
 FULLSCREEN_FIND_RECTS_THRESHOLD = 8000
 FULLSCREEN_SEARCH_INTERVAL = 1 # 全屏搜索：每帧执行 find_rects
 
+# 形态学滤波闭运算迭代次数 (1:1 保持边框尺寸)
+MORPH_ITERATIONS = 1
+
 sensor = None
 gpio2_pin = None
 
@@ -240,8 +243,8 @@ def capture_picture():
 
             if run_rect_search:
                 # 执行形态学闭运算以提高边缘稳定性（缝合边缘并去除毛刺）
-                img.dilate(1, roi=search_roi)
-                img.erode(1, roi=search_roi)
+                img.dilate(MORPH_ITERATIONS, roi=search_roi)
+                img.erode(MORPH_ITERATIONS, roi=search_roi)
 
             rects = None
             if run_rect_search:

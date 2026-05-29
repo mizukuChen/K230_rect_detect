@@ -1,5 +1,5 @@
 # ------------------------------------------------------------------------
-# rect09.py
+# rect9_temp.py
 # 基于 rect_07.py 的 LAB 阈值版本：
 # 1. 识别流程、ROI 状态机、形态学、矩形查找与校验逻辑保持和 rect_07.py 一致。
 # 2. 唯一算法差异：rect_07 使用灰度阈值，rect_08 使用 LAB 阈值。
@@ -23,14 +23,16 @@ V_TAN_HALF_FOV = math.tan(math.radians(V_FOV_DEG / 2.0))
 
 # 1. 严格同步跑通的分辨率设置
 SENSOR_ID = 2
-SENSOR_BASE_WIDTH = 1280
-SENSOR_BASE_HEIGHT = 720
-SENSOR_FPS = 90
+SENSOR_BASE_WIDTH = 1920
+SENSOR_BASE_HEIGHT = 1080
+SENSOR_FPS = 30
 DISPLAY_FPS = 15
+PREVIEW_WIDTH = 800
+PREVIEW_HEIGHT = 480
 DETECT_WIDTH = ALIGN_UP(320, 16)
 DETECT_HEIGHT = 180
-LCD_WIDTH = 800
-LCD_HEIGHT = 480
+LCD_WIDTH = PREVIEW_WIDTH
+LCD_HEIGHT = PREVIEW_HEIGHT
 LCD_X_SCALE = LCD_WIDTH / DETECT_WIDTH
 LCD_Y_SCALE = LCD_HEIGHT / DETECT_HEIGHT
 
@@ -39,6 +41,7 @@ IMG_CENTER_Y = DETECT_HEIGHT // 2
 
 # LAB 阈值：格式为 (L_min, L_max, A_min, A_max, B_min, B_max)
 # 这组值需要按现场光照在 IDE 阈值工具里微调。
+LAB_TARGET_THRESHOLD = (0, 24, -18, 15, -17, 22)
 LAB_TARGET_THRESHOLD = (0, 24, -18, 15, -17, 22)
 LAB_BINARY_INVERT = True
 DEBUG_CANDIDATES = True
@@ -53,12 +56,15 @@ MIN_ASPECT_RATIO = 0.85      # A4靶标最小长宽比
 MAX_ASPECT_RATIO = 1.65      # A4靶标最大长宽比
 MIN_AREA = 2250
 MAX_AREA = 26250
+ROI_MARGIN = 26
+ROI_EXPAND_MARGIN = 34
+ROI_FIND_RECTS_THRESHOLD = 8000
 MIN_DENSITY_MEAN = 70       # 靶标内部二值化后白色像素平均亮度阈值 (75% 空白量 = 255 * 0.75 = 191)
 
 # ROI 局部追踪参数
-ROI_MARGIN = 26
+ROI_MARGIN = 104
 MAX_COASTING_FRAMES = 3    # 目标短暂丢失时的最大维持帧数
-ROI_EXPAND_MARGIN = 34
+ROI_EXPAND_MARGIN = 136
 MAX_ROI_EXPAND_STEPS = 2    # 局部 ROI 最多扩展次数，之后才退回全屏搜索
 ROI_FIND_RECTS_THRESHOLD = 8000
 FULLSCREEN_FIND_RECTS_THRESHOLD = 8000
@@ -88,12 +94,13 @@ def camera_init():
     sensor.reset()
 
     # set chn0 output size
-    sensor.set_framesize(width=DETECT_WIDTH, height=DETECT_HEIGHT)
-    # LAB 阈值需要彩色输入
-    sensor.set_pixformat(Sensor.RGB565)
+    sensor.set_framesize(width=PREVIEW_WIDTH, height=PREVIEW_HEIGHT, chn=CAM_CHN_ID_0)
+    sensor.set_pixformat(Sensor.RGB565, chn=CAM_CHN_ID_0)
 
+    sensor.set_framesize(width=DETECT_WIDTH, height=DETECT_HEIGHT, chn=CAM_CHN_ID_2)
+    sensor.set_pixformat(Sensor.RGB565, chn=CAM_CHN_ID_2)
     # use IDE as display output
-    Display.init(Display.VIRT, width=DETECT_WIDTH, height=DETECT_HEIGHT, fps=DISPLAY_FPS, to_ide=True)
+    Display.init(Display.VIRT, width=PREVIEW_WIDTH, height=PREVIEW_HEIGHT, fps=DISPLAY_FPS, to_ide=True)
     # init media manager
     MediaManager.init()
     # sensor start run
@@ -228,7 +235,7 @@ def capture_picture():
             os.exitpoint()
             global sensor
             # 1. 抓取原始彩色图像
-            img = sensor.snapshot()
+            img = sensor.snapshot(chn=CAM_CHN_ID_2)
 
             active_fullscreen = is_fullscreen_roi(search_roi)
             run_rect_search = True
@@ -351,15 +358,27 @@ def capture_picture():
                         print(f"Target Searching Skip... | FPS: {fps_val:.1f}")
 
             # 4. 绘制 FPS
-            img.draw_string(10, 10, "FPS: %.2f" % fps_val, color=255, scale=2)
+            preview_img = sensor.snapshot(chn=CAM_CHN_ID_0)
+            preview_img.draw_string(10, 10, "PREVIEW chn0 | ALG chn2 FPS: %.2f" % fps_val, color=(255, 0, 0), scale=2)
+            if best_rect is not None:
+                rx, ry, rw, rh = best_rect.rect()
+                preview_img.draw_rectangle([int(rx * LCD_X_SCALE), int(ry * LCD_Y_SCALE),
+                                            int(rw * LCD_X_SCALE), int(rh * LCD_Y_SCALE)],
+                                           color=(255, 0, 0), thickness=3)
+            elif tracking_state == STATE_COASTING and last_rect is not None:
+                rx, ry, rw, rh = last_rect
+                preview_img.draw_rectangle([int(rx * LCD_X_SCALE), int(ry * LCD_Y_SCALE),
+                                            int(rw * LCD_X_SCALE), int(rh * LCD_Y_SCALE)],
+                                           color=(255, 255, 0), thickness=2)
 
             # 5. 传输到电脑 IDE 显示
-            Display.show_image(img)
+            Display.show_image(preview_img)
 
             # 6. 内存回收
             rects = None
             best_rect = None
             img = None
+            preview_img = None
             gc.collect()
 
         except KeyboardInterrupt as e:
@@ -394,7 +413,7 @@ def main():
     os.exitpoint(os.EXITPOINT_ENABLE)
     camera_is_init = False
     try:
-        print("--- rect09 启动 (Sensor id=2 + 16:9 LAB 阈值动态 ROI IDE 版) ---")
+        print("--- rect9_temp 启动 (Sensor id=2 + 1280x720 LAB 阈值动态 ROI IDE 临时版) ---")
         camera_init()
         camera_is_init = True
         print("camera capture start with LAB recognition")

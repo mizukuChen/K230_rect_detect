@@ -77,3 +77,11 @@
     *   **描述**：记录项目整体架构（眼在手上方案）、视觉算法选型（投影交点法定位靶心、透视变换拟合6cm圆轨迹）以及串口 UART 通信帧协议（8字节带校验和）。
 *   **[踩坑记录_01与02架构对比分析.md](file:///D:/work_office/code/keil_project/2026_pretest/视觉/K230程序设计/踩坑记录_01与02架构对比分析.md)**
     *   **描述**：针对 K230 硬件多媒体缓冲池 (VB Pool) 和通道冲突导致 Snapshot 失败的技术问题进行了深度复盘，并阐述了“单通道采集+软件 Copy 后处理”的稳定性设计原则。
+### 4. 最近新增版本
+
+*   **[rect10.py](file:///D:/work_office/code/keil_project/2026_pretest/视觉/K230程序设计/rect10.py)** (1920x1080 wide-FOV LAB ROI IDE 版)
+    *   **配置**：`Sensor(id=2, width=1920, height=1080, fps=60)` 基础采集模式，输出 `320x180 RGB565`，IDE 虚拟显示输出。
+    *   **描述**：基于 `rect09.py` 的宽视野修正版。LAB 阈值、动态 ROI、形态学滤波、候选矩形筛选、GPIO2 输出和异常恢复逻辑保持不变；核心差异是使用 `1920x1080@60` 基础模式并放大了动态 ROI 的搜索与扩张边缘，以消除视野裁剪、抵抗低帧率下的运动模糊和丢锁风险。
+*   **[rect10_lcd.py](file:///D:/work_office/code/keil_project/2026_pretest/视觉/K230程序设计/rect10_lcd.py)** (1920x1080 wide-FOV LAB ROI LCD 版)
+    *   **配置**：`Sensor(id=2, width=1920, height=1080, fps=60)` 基础采集模式，输出 `320x180 RGB565`，`800x480 ST7701` LCD 输出。
+    *   **描述**：基于 `rect10.py` 的 LCD 全屏输出版。使用 `800x480` LCD 物理显示屏，复用一张 `800x480 RGB565` 显示帧缓冲，通过 `draw_image` 将宽视野 `320x180` 的二值识别画面拉伸到 LCD 全屏显示。

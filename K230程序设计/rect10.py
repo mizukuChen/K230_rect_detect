@@ -1,5 +1,5 @@
 # ------------------------------------------------------------------------
-# rect09.py
+# rect10.py
 # 基于 rect_07.py 的 LAB 阈值版本：
 # 1. 识别流程、ROI 状态机、形态学、矩形查找与校验逻辑保持和 rect_07.py 一致。
 # 2. 唯一算法差异：rect_07 使用灰度阈值，rect_08 使用 LAB 阈值。
@@ -23,9 +23,9 @@ V_TAN_HALF_FOV = math.tan(math.radians(V_FOV_DEG / 2.0))
 
 # 1. 严格同步跑通的分辨率设置
 SENSOR_ID = 2
-SENSOR_BASE_WIDTH = 1280
-SENSOR_BASE_HEIGHT = 720
-SENSOR_FPS = 90
+SENSOR_BASE_WIDTH = 1920
+SENSOR_BASE_HEIGHT = 1080
+SENSOR_FPS = 60
 DISPLAY_FPS = 15
 DETECT_WIDTH = ALIGN_UP(320, 16)
 DETECT_HEIGHT = 180
@@ -56,9 +56,9 @@ MAX_AREA = 26250
 MIN_DENSITY_MEAN = 70       # 靶标内部二值化后白色像素平均亮度阈值 (75% 空白量 = 255 * 0.75 = 191)
 
 # ROI 局部追踪参数
-ROI_MARGIN = 26
+ROI_MARGIN = 25
 MAX_COASTING_FRAMES = 3    # 目标短暂丢失时的最大维持帧数
-ROI_EXPAND_MARGIN = 34
+ROI_EXPAND_MARGIN = 80
 MAX_ROI_EXPAND_STEPS = 2    # 局部 ROI 最多扩展次数，之后才退回全屏搜索
 ROI_FIND_RECTS_THRESHOLD = 8000
 FULLSCREEN_FIND_RECTS_THRESHOLD = 8000
