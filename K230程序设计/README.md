@@ -35,9 +35,15 @@
 *   **[rect_07_1.py](file:///D:/work_office/code/keil_project/2026_pretest/视觉/K230程序设计/rect_07_1.py)** (动态局部 ROI 彩色预览版)
     *   **配置**：`320x240 RGB565` (彩色采集)
     *   **描述**：参考 `rect_01.py` 的“彩色原图预览 + 灰度副本算法处理”架构，在 `rect_07.py` 的动态 ROI 追踪基础上改为 RGB565 彩色采集。每帧通过 `img.copy().to_grayscale()` 生成算法副本，在副本上执行 ROI 二值化、形态学滤波和矩形查找，再将靶标框、ROI 框、中心偏差、Yaw/Pitch 与 FPS 绘制回彩色原图显示。保留 GPIO2 有效目标输出：识别到有效矩形时置高电平，未识别到有效矩形时置低电平。
+*   **[rect7_lcd.py](file:///D:/work_office/code/keil_project/2026_pretest/视觉/K230程序设计/rect7_lcd.py)** (动态局部 ROI LCD 彩色输出版)
+    *   **配置**：`320x240 RGB565` 摄像头采集，`800x480 ST7701` LCD 输出
+    *   **描述**：基于 `rect_07_1.py` 的 LCD 显示版本，保留 RGB565 彩色采集、灰度副本识别、动态 ROI 追踪、GPIO2 有效目标输出以及彩色框线叠加逻辑；主要差异是显示后端由 IDE 虚拟显示 `Display.VIRT` 改为 LCD 屏 `Display.ST7701`，并关闭 `to_ide` 镜像输出。显示时复用一张 `800x480 RGB565` LCD 帧，通过 `draw_image(..., x_scale, y_scale)` 将 `320x240` 预览画面拉伸到整块 LCD。
 *   **[rect_08.py](file:///D:/work_office/code/keil_project/2026_pretest/视觉/K230程序设计/rect_08.py)** (LAB 阈值动态 ROI 追踪版)
     *   **配置**：`320x240 RGB565` (彩色采集)
     *   **描述**：基于当前 `rect_07.py` 的完整识别流程实现，动态 ROI、ROI 扩展重获、全屏搜索降频、GPIO2 输出、`MemoryError` 恢复、形态学、矩形查找与候选校验逻辑均保持一致；核心差异仅为 `rect_07.py` 使用灰度阈值，而本版本使用 `LAB_TARGET_THRESHOLD = (0, 24, -18, 15, -17, 22)` 配合 `invert=True` 做 LAB 反相二值化。由于 LAB/RGB 二值图的 `statistics().mean()` 实测低于灰度版，密度阈值调整为 `MIN_DENSITY_MEAN = 70`。本版本采集格式为 RGB565，最终输出黑白二值图。当前开启候选矩形调试输出，会打印每个 `find_rects` 候选的面积、长宽比、均值和过滤原因，便于排查“图像清楚但未锁定”的问题。
+*   **[rect8_lcd.py](file:///D:/work_office/code/keil_project/2026_pretest/视觉/K230程序设计/rect8_lcd.py)** (LAB 阈值动态 ROI LCD 全屏版)
+    *   **配置**：`320x240 RGB565` 摄像头采集，`800x480 ST7701` LCD 输出
+    *   **描述**：基于 `rect_08.py` 的 LCD 显示版本，保留 LAB 反相二值化、动态 ROI、ROI 扩展重获、全屏搜索降频、GPIO2 输出、`MemoryError` 恢复、形态学和候选校验逻辑；显示端改为 LCD，并复用一张 `800x480 RGB565` 显示帧，通过 `draw_image(..., x_scale, y_scale)` 将 `320x240` 黑白二值输出拉伸到 LCD 全屏。
 *   **[rect_08_1.py](file:///D:/work_office/code/keil_project/2026_pretest/视觉/K230程序设计/rect_08_1.py)** (LAB 阈值彩色预览版)
     *   **配置**：`320x240 RGB565` (彩色采集)
     *   **描述**：`rect_08.py` 的彩色显示版本，复用其 LAB 反相二值化、动态 ROI、GPIO2 输出和异常恢复策略，但将识别结果绘制回 RGB565 原图显示。该文件依赖同目录下的 `rect_08.py`，适合在调试阶段同时观察真实彩色画面和识别框线。
@@ -52,6 +58,9 @@
 
 *   **[main.py](file:///D:/work_office/code/keil_project/2026_pretest/视觉/K230程序设计/main.py)** (开机自启程序)
     *   **描述**：K230 芯片上电自动运行 the 入口代码，当前内容映射至 `rect_03.py`，实现设备通电后自动运行灰度版目标追踪。
+*   **[test_rect_example_lcd.py](file:///D:/work_office/code/keil_project/2026_pretest/视觉/K230程序设计/test_rect_example_lcd.py)** (官方 find_rects LCD 全屏测试版)
+    *   **配置**：`320x240 RGB565` 摄像头采集，`800x480 ST7701` LCD 输出
+    *   **描述**：由 `examples/11-Feature-Detection/find_rects.py` 改写而来，保留官方 `img.find_rects(threshold=10000)` 矩形检测与红框/绿角点绘制逻辑；显示端改为 LCD，并复用一张 `800x480 RGB565` 显示帧，通过 `draw_image(..., x_scale, y_scale)` 将 `320x240` 识别画面拉伸到 LCD 全屏。
 
 ### 3. 设计方案与技术文档
 
