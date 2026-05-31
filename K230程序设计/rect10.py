@@ -394,7 +394,7 @@ def main():
     os.exitpoint(os.EXITPOINT_ENABLE)
     camera_is_init = False
     try:
-        print("--- rect09 启动 (Sensor id=2 + 16:9 LAB 阈值动态 ROI IDE 版) ---")
+        print("--- rect10 启动 (Sensor id=2 + 16:9 LAB 动态 ROI IDE 版) ---")
         camera_init()
         camera_is_init = True
         print("camera capture start with LAB recognition")
