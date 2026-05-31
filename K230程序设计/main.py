@@ -56,7 +56,6 @@ FRAME_END = 0x5B
 # encoded = 500 + angle_deg * 10，可表达约 [-50.0, +50.0] 度。
 ANGLE_ENCODE_ZERO = 500
 ANGLE_ENCODE_SCALE = 10.0
-UART_ANGLE_SCALE = 5.0        # UART 角度偏差线性放大倍数 (用于将角度放大到与像素差相近的量级，1度 ≈ 5像素)
 
 
 # 误差足够小时打开激光笔。当前没有单独识别激光点，因此用标定参考点表示云台期望指向。
@@ -445,9 +444,9 @@ def capture_picture():
 
                 # 一旦补偿目标点连续进入标定误差范围，即锁存打开激光，后续保持开启。
                 set_gpio2_high(laser_latched)
-                # 对 UART 发送的角度偏差进行线性放大（乘以 UART_ANGLE_SCALE），使其达到与像素差相近的量级
-                send_vision_frame(encode_angle_deg(yaw_err * UART_ANGLE_SCALE),
-                                  encode_angle_deg(pitch_err * UART_ANGLE_SCALE),
+                # 直接乘 5 放大发送
+                send_vision_frame(encode_angle_deg(yaw_err * 5),
+                                  encode_angle_deg(pitch_err * 5),
                                   ANGLE_ENCODE_ZERO,
                                   ANGLE_ENCODE_ZERO,
                                   corners)
