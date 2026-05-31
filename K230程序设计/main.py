@@ -49,14 +49,9 @@ K230_UART_TX_PIN = 11
 K230_UART_RX_PIN = 12
 K230_UART_BAUDRATE = 115200
 
-FRAME_START = 0x12
-FRAME_END = 0x5B
-
-# 角度误差通过原 CanMV 激光段的 uint16 字段传输：
-# encoded = 500 + angle_deg * 10，可表达约 [-50.0, +50.0] 度。
-ANGLE_ENCODE_ZERO = 500
-ANGLE_ENCODE_SCALE = 10.0
-
+FRAME_SOF0 = 0xA5
+FRAME_SOF1 = 0x5A
+ANGLE_SCALE = 100.0
 
 # 误差足够小时打开激光笔。当前没有单独识别激光点，因此用标定参考点表示云台期望指向。
 LASER_ENABLE_YAW_ERROR_DEG = 1.5
@@ -65,16 +60,16 @@ LASER_ENABLE_CONFIRM_FRAMES = 3
 
 # --- 物理靶标与激光标定偏差参数 ---
 TARGET_HEIGHT_CM = 17.3         # 靶标物理高度 (单位: cm)
-CALIB_OFFSET_CM = 1.5           # 激光标定目标点在靶心上方的物理偏差距离 (单位: cm)
-IDEAL_YAW_DEG = 0.0             # 理想偏航角 (度)
-IDEAL_PITCH_DEG = 3.0            # 理想俯仰角 (度，摄像头中心在目标点上方3度，等价于目标点在画面中偏下3度，其 Pitch 实际值应为 +3.0)
+CALIB_OFFSET_CM = 1.2           # 激光标定目标点在靶心上方的物理偏差距离 (单位: cm)
+IDEAL_YAW_DEG = 1.0             # 理想偏航角 (度)
+IDEAL_PITCH_DEG = 2.5           # 理想俯仰角 (度，摄像头中心在目标点上方3度，等价于目标点在画面中偏下3度，其 Pitch 实际值应为 +3.0)
 
 IDEAL_TARGET_X = int(IMG_CENTER_X + (math.tan(math.radians(IDEAL_YAW_DEG)) / H_TAN_HALF_FOV) * (DETECT_WIDTH / 2.0))
 IDEAL_TARGET_Y = int(IMG_CENTER_Y + (math.tan(math.radians(IDEAL_PITCH_DEG)) / V_TAN_HALF_FOV) * (DETECT_HEIGHT / 2.0))
 
 # LAB 阈值：格式为 (L_min, L_max, A_min, A_max, B_min, B_max)
 # 这组值需要按现场光照在 IDE 阈值工具里微调。
-LAB_TARGET_THRESHOLD = (0, 24, -18, 15, -17, 22)  # 识别黑色边框的 LAB 色彩空间阈值
+LAB_TARGET_THRESHOLD = (0, 20, -10, 10, -10, 10)  # 识别黑色边框的 LAB 色彩空间阈值
 LAB_BINARY_INVERT = True      # 二值化是否反相 (True 表示将阈值外的亮色区域设为白色，阈值内的黑色边框设为白色)
 DEBUG_CANDIDATES = False      # 是否开启候选矩形调试模式 (若开启会绘制并打印过滤原因)
 
@@ -86,21 +81,21 @@ STATE_COASTING = 2            # 状态机状态：滑行状态 (目标短暂丢�
 # --- 靶标验证与局部 ROI 追踪配置 (与 rect11.py 保持一致) ---
 MIN_ASPECT_RATIO = 0.85       # 候选靶标的最小长宽比
 MAX_ASPECT_RATIO = 1.65       # 候选靶标的最大长宽比
-MIN_AREA = 2250               # 候选靶标在 320x180 画面下的最小面积 (像素点数)
-MAX_AREA = 26250              # 候选靶标在 320x180 画面下的最大面积 (像素点数)
+MIN_AREA = 1200               # 候选靶标在 320x180 画面下的最小面积 (像素点数)
+MAX_AREA = 20000              # 候选靶标在 320x180 画面下的最大面积 (像素点数)
 MIN_DENSITY_MEAN = 70         # 靶标内部二值化后白色像素平均亮度阈值 (用于判断空心度和过滤杂噪)
 
 # ROI 局部追踪参数
 ROI_MARGIN = 25               # 跟踪成功后，局部搜索框向四周外扩的像素余量 (防止运动出框)
 MAX_COASTING_FRAMES = 3       # 目标短暂丢失时，允许保持滑行状态的最大帧数
 ROI_EXPAND_MARGIN = 80        # 局部追踪丢失后，每次向外扩展搜索区域的像素量
-MAX_ROI_EXPAND_STEPS = 2      # 局部追踪丢失后，最大允许扩张 ROI 的次数，超限则退回全屏搜索
+MAX_ROI_EXPAND_STEPS = 3      # 局部追踪丢失后，最大允许扩张 ROI 的次数，超限则退回全屏搜索
 ROI_FIND_RECTS_THRESHOLD = 8000  # 局部 ROI 追踪时的矩形边缘梯度阈值
 FULLSCREEN_FIND_RECTS_THRESHOLD = 8000  # 全屏搜索时的矩形边缘梯度阈值
 FULLSCREEN_SEARCH_INTERVAL = 1  # 全屏搜索帧间隔 (每帧都执行)
 
 # 形态学滤波闭运算迭代次数 (1:1 保持边框尺寸)
-MORPH_ITERATIONS = 1          # 膨胀与腐蚀的迭代次数，用于边缘缝合与降噪
+MORPH_ITERATIONS = 0          # 膨胀与腐蚀的迭代次数，用于边缘缝合与降噪
 
 sensor = None
 gpio2_pin = None
@@ -117,55 +112,26 @@ def uart_init():
                  parity=UART.PARITY_NONE,
                  stop=UART.STOPBITS_ONE)
 
-def append_u16_be(frame, value):
+def append_i16_be(frame, value):
     value = int(value)
-    if value < 0:
-        value = 0
-    if value > 65535:
-        value = 65535
+    if value < -32768:
+        value = -32768
+    if value > 32767:
+        value = 32767
+    value &= 0xFFFF
     frame.append((value >> 8) & 0xFF)
     frame.append(value & 0xFF)
 
-def encode_angle_deg(angle_deg):
-    value = int(round(ANGLE_ENCODE_ZERO + float(angle_deg) * ANGLE_ENCODE_SCALE))
-    if value < 0:
-        value = 0
-    if value > 1000:
-        value = 1000
-    return value
-
-def normalize_rect_corners(corners):
-    if not corners or len(corners) < 4:
-        return [(0, 0), (0, 0), (0, 0), (0, 0)]
-
-    sorted_by_y = sorted(corners, key=lambda p: p[1])
-    top = sorted(sorted_by_y[:2], key=lambda p: p[0])
-    bottom = sorted(sorted_by_y[2:], key=lambda p: p[0])
-
-    bottom_left = bottom[0]
-    bottom_right = bottom[1]
-    top_right = top[1]
-    top_left = top[0]
-    return [bottom_left, bottom_right, top_right, top_left]
-
-def send_vision_frame(target_x=0, target_y=0, laser_x=0, laser_y=0, corners=None):
+def send_angle_error_frame(yaw_err_deg, pitch_err_deg):
     if uart2 is None:
         return
 
     frame = bytearray()
-    frame.append(FRAME_START)
-    frame.append(0x00)
-
-    append_u16_be(frame, target_x)
-    append_u16_be(frame, target_y)
-    append_u16_be(frame, laser_x)
-    append_u16_be(frame, laser_y)
-
-    for x, y in normalize_rect_corners(corners):
-        append_u16_be(frame, x)
-        append_u16_be(frame, y)
-
-    frame.append(FRAME_END)
+    frame.append(FRAME_SOF0)
+    frame.append(FRAME_SOF1)
+    append_i16_be(frame, round(float(yaw_err_deg) * ANGLE_SCALE))
+    append_i16_be(frame, round(float(pitch_err_deg) * ANGLE_SCALE))
+    frame.append(sum(frame) & 0xFF)
     uart2.write(frame)
 
 def is_laser_error_small(yaw_err, pitch_err):
@@ -181,7 +147,7 @@ def gpio_init():
 
 def set_gpio2_high(is_high):
     if gpio2_pin:
-        gpio2_pin.value(1 if is_high else 0)
+        gpio2_pin.value(1 if is_high else 1)
 
 def camera_init():
     global sensor
@@ -325,6 +291,7 @@ def capture_picture():
     laser_latched = False
     roi_expand_steps = 0
     fullscreen_search_counter = 0
+    lock_confirm_count = 0
     while True:
         # 计算滑动窗口瞬时帧率
         now_time = time.ticks_ms()
@@ -380,9 +347,22 @@ def capture_picture():
                             best_rect = r
 
             # 3. 状态机逻辑处理与 ROI 动态更新
+            rect_found = (best_rect is not None)
+            if rect_found:
+                # 搜寻状态下需要连续 2 帧检测确认，以过滤传输抖动产生的瞬时伪矩形
+                if tracking_state == STATE_SEARCHING:
+                    lock_confirm_count += 1
+                    if lock_confirm_count >= 2:
+                        tracking_state = STATE_LOCKED
+                        lock_confirm_count = 0
+                    else:
+                        best_rect = None
+                else:
+                    tracking_state = STATE_LOCKED
+                    lock_confirm_count = 0
+
             if best_rect is not None:
                 # --- 成功锁定了有效靶标 ---
-                tracking_state = STATE_LOCKED
                 coast_counter = 0
                 roi_expand_steps = 0
 
@@ -429,9 +409,9 @@ def capture_picture():
                 img.draw_cross(IMG_CENTER_X, IMG_CENTER_Y, color=255, size=10)
                 img.draw_line(IMG_CENTER_X, IMG_CENTER_Y, target_x, target_y, color=255)
 
-                # 在画面上实时显示角度及理想偏差 (与 rect10_lcd 保持完全一致的排版命名，并改用 draw_string_advanced 以消除弃用警告)
-                img.draw_string_advanced(target_x + 10, target_y - 30, 20, "dx:%d dy:%d" % (dx, dy), color=255)
-                img.draw_string_advanced(target_x + 10, target_y - 10, 20, "Yaw:%.1f Pitch:%.1f" % (yaw_angle, pitch_angle), color=255)
+                # 在画面上实时显示角度及理想偏差 (与 rect10_lcd 保持完全一致的排版命名，新增第三行偏差)
+                img.draw_string(target_x + 10, target_y - 30, "dx:%d dy:%d" % (dx, dy), color=255, scale=2)
+                img.draw_string(target_x + 10, target_y - 10, "Yaw:%.1f Pitch:%.1f" % (yaw_angle, pitch_angle), color=255, scale=2)
 
                 if (not laser_latched) and is_laser_error_small(yaw_err, pitch_err):
                     if laser_enable_count < LASER_ENABLE_CONFIRM_FRAMES:
@@ -444,12 +424,7 @@ def capture_picture():
 
                 # 一旦补偿目标点连续进入标定误差范围，即锁存打开激光，后续保持开启。
                 set_gpio2_high(laser_latched)
-                # 直接乘 5 放大发送
-                send_vision_frame(encode_angle_deg(yaw_err * 5),
-                                  encode_angle_deg(pitch_err * 5),
-                                  ANGLE_ENCODE_ZERO,
-                                  ANGLE_ENCODE_ZERO,
-                                  corners)
+                send_angle_error_frame(yaw_err, pitch_err)
 
                 # 缓存当前的锁死坐标，留作下一次丢失时滑行使用
                 last_rect = [v for v in best_rect.rect()]
@@ -464,6 +439,9 @@ def capture_picture():
                 print(f"Target LOCKED (LAB ROI) -> target:({target_x:3d},{target_y:3d}) dx: {dx:3d}, dy: {dy:3d} | Laser:{1 if laser_latched else 0} | Yaw: {yaw_angle:5.1f}°, Pitch: {pitch_angle:5.1f}° | Yaw Err: {yaw_err:5.1f}°, Pitch Err: {pitch_err:5.1f}° | ROI: {search_roi} | FPS: {fps_val:.1f}")
 
             else:
+                if not rect_found and tracking_state == STATE_SEARCHING:
+                    lock_confirm_count = 0
+
                 if not laser_latched:
                     laser_enable_count = 0
                     set_gpio2_high(False)
@@ -495,31 +473,28 @@ def capture_picture():
                     img.draw_rectangle(search_roi, color=255, thickness=1)
 
                     img.draw_cross(IMG_CENTER_X, IMG_CENTER_Y, color=255, size=10)
-                    img.draw_string_advanced(last_tx + 10, last_ty - 30, 20, "dx:%d dy:%d (Coast)" % (last_dx, last_dy), color=255)
-                    img.draw_string_advanced(last_tx + 10, last_ty - 10, 20, "Yaw:%.1f Pitch:%.1f (Coast)" % (last_yaw, last_pitch), color=255)
+                    img.draw_line(IMG_CENTER_X, IMG_CENTER_Y, last_tx, last_ty, color=255)
+                    img.draw_string(last_tx + 10, last_ty - 30, "dx:%d dy:%d (Coast)" % (last_dx, last_dy), color=255, scale=2)
+                    img.draw_string(last_tx + 10, last_ty - 10, "Yaw:%.1f Pitch:%.1f (Coast)" % (last_yaw, last_pitch), color=255, scale=2)
                     display_yaw_err, display_pitch_err = last_yaw_err, last_pitch_err
                     display_err_valid = True
-                    send_vision_frame()
-
                     print(f"Target Coasting [{coast_counter}] -> Keep ROI: {search_roi} | FPS: {fps_val:.1f}")
                 else:
                     display_err_valid = False
                     # 搜寻状态下，把搜索框设回全屏，并提示
                     if run_rect_search:
-                        img.draw_string_advanced(10, 40, 20, "Searching Fullscreen...", color=255)
-                        send_vision_frame()
+                        img.draw_string(10, 40, "Searching Fullscreen...", color=255, scale=2)
                         print(f"Target Searching Fullscreen... | FPS: {fps_val:.1f}")
                     else:
-                        img.draw_string_advanced(10, 40, 20, "Searching Skip...", color=255)
-                        send_vision_frame()
+                        img.draw_string(10, 40, "Searching Skip...", color=255, scale=2)
                         print(f"Target Searching Skip... | FPS: {fps_val:.1f}")
 
             # 4. 绘制 FPS
-            img.draw_string_advanced(10, 10, 20, "FPS: %.2f" % fps_val, color=255)
+            img.draw_string(10, 10, "FPS: %.2f" % fps_val, color=255, scale=2)
             if display_err_valid:
-                img.draw_string_advanced(10, 30, 20, "Y_Err:%.1f P_Err:%.1f" % (display_yaw_err, display_pitch_err), color=255)
+                img.draw_string(10, 30, "Y_Err:%.1f P_Err:%.1f" % (display_yaw_err, display_pitch_err), color=255, scale=2)
             else:
-                img.draw_string_advanced(10, 30, 20, "Y_Err:-- P_Err:--", color=255)
+                img.draw_string(10, 30, "Y_Err:-- P_Err:--", color=255, scale=2)
 
             # 5. 显示到 LCD 全屏
             display_img.clear()
