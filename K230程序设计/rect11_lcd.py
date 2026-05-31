@@ -6,6 +6,7 @@
 # 3. 显示时复用一张 800x480 RGB565 LCD 帧，通过 draw_image 将 320x180 画面拉伸到 LCD 全屏。
 # 4. 算法修正：寻找摄像头镜头中心与矩形中心偏上 1.5 cm 的标定目标点，计算实际 Yaw/Pitch。
 # 5. 计算并实时在屏幕上以及控制台输出目标点实际角度与理想状态 (Yaw 0°, Pitch 3°) 的偏差。
+# 6. 输出格式与变量命名（dx, dy, Yaw, Pitch）与 rect10_lcd 保持完全一致，方便上位机无缝解析。
 # ------------------------------------------------------------------------
 import time, os, gc, sys, math
 import image
@@ -308,12 +309,12 @@ def capture_picture():
                 angle_x_rad = math.atan((dx / (DETECT_WIDTH / 2.0)) * H_TAN_HALF_FOV)
                 angle_y_rad = math.atan((dy / (DETECT_HEIGHT / 2.0)) * V_TAN_HALF_FOV)
 
-                yaw_actual = math.degrees(angle_x_rad)
-                pitch_actual = math.degrees(angle_y_rad)
+                yaw_angle = math.degrees(angle_x_rad)
+                pitch_angle = math.degrees(angle_y_rad)
                 
                 # 计算与理想标定情况的偏差 (理想: 偏上1.5cm点在 Yaw=0°, Pitch=3°)
-                yaw_err = yaw_actual - IDEAL_YAW_DEG
-                pitch_err = pitch_actual - IDEAL_PITCH_DEG
+                yaw_err = yaw_angle - IDEAL_YAW_DEG
+                pitch_err = pitch_angle - IDEAL_PITCH_DEG
 
                 # 绘制靶标框和十字中心
                 img.draw_rectangle([v for v in best_rect.rect()], color=255, thickness=2)
@@ -329,19 +330,20 @@ def capture_picture():
                 img.draw_cross(IMG_CENTER_X, IMG_CENTER_Y, color=255, size=10)
                 img.draw_line(IMG_CENTER_X, IMG_CENTER_Y, target_x, target_y, color=255)
                 
-                # 在画面上实时显示角度及理想偏差
-                img.draw_string(target_x + 10, target_y - 25, "Yaw:%.1f Pitch:%.1f" % (yaw_actual, pitch_actual), color=255, scale=2)
-                img.draw_string(target_x + 10, target_y - 5, "Y_Err:%.1f P_Err:%.1f" % (yaw_err, pitch_err), color=255, scale=2)
+                # 在画面上实时显示角度及理想偏差 (与 rect10_lcd 保持完全一致的排版命名，新增第三行偏差)
+                img.draw_string(target_x + 10, target_y - 30, "dx:%d dy:%d" % (dx, dy), color=255, scale=2)
+                img.draw_string(target_x + 10, target_y - 10, "Yaw:%.1f Pitch:%.1f" % (yaw_angle, pitch_angle), color=255, scale=2)
+                img.draw_string(target_x + 10, target_y + 10, "Y_Err:%.1f P_Err:%.1f" % (yaw_err, pitch_err), color=255, scale=2)
 
                 # 缓存当前的锁死坐标，留作下一次丢失时滑行使用
                 last_rect = [v for v in best_rect.rect()]
                 last_cx, last_cy = t_cx, t_cy
                 last_dx, last_dy = dx, dy
-                last_yaw, last_pitch = yaw_actual, pitch_actual
+                last_yaw, last_pitch = yaw_angle, pitch_angle
                 last_tx, last_ty = target_x, target_y
                 last_yaw_err, last_pitch_err = yaw_err, pitch_err
 
-                print(f"Target LOCKED (LAB ROI) -> Actual Pt: ({target_x}, {target_y}) | Yaw: {yaw_actual:5.1f}°, Pitch: {pitch_actual:5.1f}° | Yaw Err: {yaw_err:5.1f}°, Pitch Err: {pitch_err:5.1f}° | ROI: {search_roi} | FPS: {fps_val:.1f}")
+                print(f"Target LOCKED (LAB ROI) -> dx: {dx:3d}, dy: {dy:3d} | Yaw: {yaw_angle:5.1f}°, Pitch: {pitch_angle:5.1f}° | Yaw Err: {yaw_err:5.1f}°, Pitch Err: {pitch_err:5.1f}° | ROI: {search_roi} | FPS: {fps_val:.1f}")
 
             else:
                 set_gpio2_high(False)
@@ -372,8 +374,9 @@ def capture_picture():
 
                     img.draw_cross(IMG_CENTER_X, IMG_CENTER_Y, color=255, size=10)
                     img.draw_line(IMG_CENTER_X, IMG_CENTER_Y, last_tx, last_ty, color=255)
-                    img.draw_string(last_tx + 10, last_ty - 25, "Yaw:%.1f Pitch:%.1f (Coast)" % (last_yaw, last_pitch), color=255, scale=2)
-                    img.draw_string(last_tx + 10, last_ty - 5, "Y_Err:%.1f P_Err:%.1f (Coast)" % (last_yaw_err, last_pitch_err), color=255, scale=2)
+                    img.draw_string(last_tx + 10, last_ty - 30, "dx:%d dy:%d (Coast)" % (last_dx, last_dy), color=255, scale=2)
+                    img.draw_string(last_tx + 10, last_ty - 10, "Yaw:%.1f Pitch:%.1f (Coast)" % (last_yaw, last_pitch), color=255, scale=2)
+                    img.draw_string(last_tx + 10, last_ty + 10, "Y_Err:%.1f P_Err:%.1f (Coast)" % (last_yaw_err, last_pitch_err), color=255, scale=2)
 
                     print(f"Target Coasting [{coast_counter}] -> Keep ROI: {search_roi} | FPS: {fps_val:.1f}")
                 else:
