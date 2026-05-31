@@ -328,10 +328,10 @@ def capture_picture():
                 img.draw_cross(IMG_CENTER_X, IMG_CENTER_Y, color=255, size=10)
                 img.draw_line(IMG_CENTER_X, IMG_CENTER_Y, target_x, target_y, color=255)
                 
-                # 在画面上实时显示角度及理想偏差 (与 rect10 保持完全一致的排版命名，新增第三行偏差)
-                img.draw_string(target_x + 10, target_y - 30, "dx:%d dy:%d" % (dx, dy), color=255, scale=2)
-                img.draw_string(target_x + 10, target_y - 10, "Yaw:%.1f Pitch:%.1f" % (yaw_angle, pitch_angle), color=255, scale=2)
-                img.draw_string(target_x + 10, target_y + 10, "Y_Err:%.1f P_Err:%.1f" % (yaw_err, pitch_err), color=255, scale=2)
+                # 在画面上实时显示角度及理想偏差 (与 rect10 保持完全一致的排版命名，并改用 draw_string_advanced 以消除弃用警告)
+                img.draw_string_advanced(target_x + 10, target_y - 30, 20, "dx:%d dy:%d" % (dx, dy), color=255)
+                img.draw_string_advanced(target_x + 10, target_y - 10, 20, "Yaw:%.1f Pitch:%.1f" % (yaw_angle, pitch_angle), color=255)
+                img.draw_string_advanced(target_x + 10, target_y + 10, 20, "Y_Err:%.1f P_Err:%.1f" % (yaw_err, pitch_err), color=255)
 
                 # 缓存当前的锁死坐标，留作下一次丢失时滑行使用
                 last_rect = [v for v in best_rect.rect()]
@@ -372,22 +372,22 @@ def capture_picture():
 
                     img.draw_cross(IMG_CENTER_X, IMG_CENTER_Y, color=255, size=10)
                     img.draw_line(IMG_CENTER_X, IMG_CENTER_Y, last_tx, last_ty, color=255)
-                    img.draw_string(last_tx + 10, last_ty - 30, "dx:%d dy:%d (Coast)" % (last_dx, last_dy), color=255, scale=2)
-                    img.draw_string(last_tx + 10, last_ty - 10, "Yaw:%.1f Pitch:%.1f (Coast)" % (last_yaw, last_pitch), color=255, scale=2)
-                    img.draw_string(last_tx + 10, last_ty + 10, "Y_Err:%.1f P_Err:%.1f (Coast)" % (last_yaw_err, last_pitch_err), color=255, scale=2)
+                    img.draw_string_advanced(last_tx + 10, last_ty - 30, 20, "dx:%d dy:%d (Coast)" % (last_dx, last_dy), color=255)
+                    img.draw_string_advanced(last_tx + 10, last_ty - 10, 20, "Yaw:%.1f Pitch:%.1f (Coast)" % (last_yaw, last_pitch), color=255)
+                    img.draw_string_advanced(last_tx + 10, last_ty + 10, 20, "Y_Err:%.1f P_Err:%.1f (Coast)" % (last_yaw_err, last_pitch_err), color=255)
 
                     print(f"Target Coasting [{coast_counter}] -> Keep ROI: {search_roi} | FPS: {fps_val:.1f}")
                 else:
                     # 搜寻状态下，把搜索框设回全屏，并提示
                     if run_rect_search:
-                        img.draw_string(10, 40, "Searching Fullscreen...", color=255, scale=2)
+                        img.draw_string_advanced(10, 40, 20, "Searching Fullscreen...", color=255)
                         print(f"Target Searching Fullscreen... | FPS: {fps_val:.1f}")
                     else:
-                        img.draw_string(10, 40, "Searching Skip...", color=255, scale=2)
+                        img.draw_string_advanced(10, 40, 20, "Searching Skip...", color=255)
                         print(f"Target Searching Skip... | FPS: {fps_val:.1f}")
 
             # 4. 绘制 FPS
-            img.draw_string(10, 10, "FPS: %.2f" % fps_val, color=255, scale=2)
+            img.draw_string_advanced(10, 10, 20, "FPS: %.2f" % fps_val, color=255)
 
             # 5. 传输到电脑 IDE 显示
             Display.show_image(img)
