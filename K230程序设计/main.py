@@ -209,6 +209,10 @@ def validate_target_candidate(img, r):
     if stat.mean() < MIN_DENSITY_MEAN:
         return False
 
+    # 收紧验证条件：利用边缘梯度强度 (magnitude) 过滤弱对比度噪点拟合
+    if r.magnitude() < 12000:
+        return False
+
     return True
 
 def get_candidate_reject_reason(img, r):
@@ -224,6 +228,8 @@ def get_candidate_reject_reason(img, r):
         return "area", area, aspect_ratio, mean
     if mean < MIN_DENSITY_MEAN:
         return "mean", area, aspect_ratio, mean
+    if r.magnitude() < 12000:
+        return "magnitude", area, aspect_ratio, mean
     return "ok", area, aspect_ratio, mean
 
 # ------------------------------------------------------------------------
@@ -292,6 +298,10 @@ def capture_picture():
     roi_expand_steps = 0
     fullscreen_search_counter = 0
     lock_confirm_count = 0
+    start_skip_frames = 5
+    far_target_confirm_count = 0
+    far_target_cx = 0
+    far_target_cy = 0
     while True:
         # 计算滑动窗口瞬时帧率
         now_time = time.ticks_ms()
@@ -308,9 +318,19 @@ def capture_picture():
 
         try:
             os.exitpoint()
-            global sensor
             # 1. 抓取原始彩色图像
             img = sensor.snapshot()
+
+            # 一开始寻找矩形的时候，前 5 帧跳过处理，用于让摄像头传感器自动曝光/白平衡稳定下来
+            if start_skip_frames > 0:
+                start_skip_frames -= 1
+                img.draw_string(10, 40, "Sensor Stabilizing...", color=255, scale=2)
+                display_img.clear()
+                display_img.draw_image(img, 0, 0, x_scale=LCD_X_SCALE, y_scale=LCD_Y_SCALE)
+                Display.show_image(display_img)
+                img = None
+                gc.collect()
+                continue
 
             active_fullscreen = is_fullscreen_roi(search_roi)
             run_rect_search = True
@@ -348,6 +368,52 @@ def capture_picture():
 
             # 3. 状态机逻辑处理与 ROI 动态更新
             rect_found = (best_rect is not None)
+            if rect_found:
+                corners = best_rect.corners()
+                t_cx, t_cy = get_target_center(corners)
+                
+                # 如果之前已经有锁定的目标，检查新目标的距离是否过远
+                if last_rect is not None:
+                    dist = math.sqrt((t_cx - last_cx)**2 + (t_cy - last_cy)**2)
+                    if dist > 50.0:  # 离现在比较远的矩形 (阈值设为 50 像素，约 10度)
+                        if far_target_confirm_count == 0:
+                            # 开始对该远端目标进行连续帧稳定度确认
+                            far_target_cx = t_cx
+                            far_target_cy = t_cy
+                            far_target_confirm_count = 1
+                            best_rect = None  # 暂不认可
+                            rect_found = False
+                        else:
+                            # 检查新位置是否与前一帧稳定
+                            cand_dist = math.sqrt((t_cx - far_target_cx)**2 + (t_cy - far_target_cy)**2)
+                            if cand_dist < 15.0:
+                                far_target_confirm_count += 1
+                                far_target_cx = t_cx
+                                far_target_cy = t_cy
+                                if far_target_confirm_count >= 3:
+                                    # 连续 3 帧稳定，正式认可并切换到该目标
+                                    far_target_confirm_count = 0
+                                else:
+                                    best_rect = None  # 尚未稳定达到 3 帧，暂不认可
+                                    rect_found = False
+                            else:
+                                # 位置发生漂移，重置计数器
+                                far_target_cx = t_cx
+                                far_target_cy = t_cy
+                                far_target_confirm_count = 1
+                                best_rect = None
+                                rect_found = False
+                    else:
+                        # 距离较近，属于正常跟踪目标，清除远端确认计数
+                        far_target_confirm_count = 0
+                else:
+                    # 之前没有锁定目标，清除确认计数
+                    far_target_confirm_count = 0
+            else:
+                # 本帧没有找到矩形，清除远端确认计数
+                far_target_confirm_count = 0
+
+            # 运行原有的连续帧确认锁死逻辑
             if rect_found:
                 # 搜寻状态下需要连续 2 帧检测确认，以过滤传输抖动产生的瞬时伪矩形
                 if tracking_state == STATE_SEARCHING:
